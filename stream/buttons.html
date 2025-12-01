@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Control</title>
+<style>
+    html, body {
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        background: #111;
+    }
+
+    /* Fullscreen 3x3 grid */
+    .grid {
+        height: 100%;
+        width: 100%;
+        display: grid;
+        grid-template-rows: 1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 4px;
+        background: #000;
+    }
+
+    .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #222;
+        color: white;
+        font-size: 3rem;
+        user-select: none;
+        cursor: pointer;
+        border-radius: 8px;
+        /* no hover, no active states */
+    }
+</style>
+</head>
+
+<body>
+
+<div class="grid">
+    <div></div>
+    <div class="btn" onclick="send('/up')">UP</div>
+    <div></div>
+
+    <div class="btn" onclick="send('/left')">LEFT</div>
+    <div class="btn" onclick="send('/space')">SPACE</div>
+    <div class="btn" onclick="send('/right')">RIGHT</div>
+
+    <div></div>
+    <div class="btn" onclick="send('/down')">DOWN</div>
+    <div></div>
+</div>
+
+<script>
+async function send(path) {
+    try { await fetch(path, { method: "POST" }); }
+    catch (e) { console.error(e); }
+}
+</script>
+
+</body>
+</html>

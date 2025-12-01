@@ -1,0 +1,181 @@
+
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live Stream</title>
+    <style>
+      body {
+        margin: 0;
+        background: #000;
+        overflow: hidden;
+      }
+
+
+#container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Video frame */
+#webrtcFrame {
+  border: 0;
+  background: #000;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+}
+
+/* Click layer: matches video width, top 90% of video height */
+#inputOverlay {
+  position: absolute;
+  z-index: 5;
+  cursor: pointer;
+
+  /* same width as video */
+  width: min(100vw, calc(100vh * 16 / 9));
+
+  /* 90% of the video height */
+  height: calc(min(100vh, calc(100vw * 9 / 16)) * 0.9);
+
+  /* align horizontally with video center */
+  left: 50%;
+  /* vertically use video center but nudge up so it covers top 90% */
+  top: 50%;
+  transform: translate(-50%, -55.56%); /* ~5% of video height above center */
+  background: transparent;
+}
+
+/* Fullscreen button stays on top */
+#fsBtn {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  width: 55px;
+  height: 55px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: 0.15s, opacity 0.3s ease;
+  z-index: 10;
+}
+      #fsBtn:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      #fsBtn svg {
+        width: 55%;
+        height: 55%;
+        fill: white;
+      }
+      /* Hidden in fullscreen */
+      .fullscreen-hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <!-- MediaMTX WebRTC player -->
+      <iframe
+        id="webrtcFrame"
+        src="http://10.66.66.1:8889/stream"
+        allow="autoplay; fullscreen"
+      ></iframe>
+
+      <!-- Click layer for /space -->
+      <div id="inputOverlay"></div>
+
+      <!-- Fullscreen button -->
+      <div id="fsBtn" title="Fullscreen">
+        <svg viewBox="0 0 23 23">
+          <path
+            d="M12.5 7C12.5 6.58579 12.8358 6.25 13.25 6.25H17C17.4142 6.25 17.75 6.58579 17.75 7V10.75C17.75 11.1642 17.4142 11.5 17 11.5C16.5858 11.5 16.25 11.1642 16.25 10.75V8.81066L8.81066 16.25H10.75C11.1642 16.25 11.5 16.5858 11.5 17C11.5 17.4142 11.1642 17.75 10.75 17.75H7C6.58579 17.75 6.25 17.4142 6.25 17V13.25C6.25 12.8358 6.58579 12.5 7 12.5C7.41421 12.5 7.75 12.8358 7.75 13.25V15.1893L15.1893 7.75H13.25C12.8358 7.75 12.5 7.41421 12.5 7Z"
+          />
+        </svg>
+      </div>
+    </div>
+
+    <script>
+      const fsBtn = document.getElementById("fsBtn");
+      const container = document.getElementById("container");
+      const inputOverlay = document.getElementById("inputOverlay");
+
+      // ------- INPUT HANDLING (same behavior as before) -------
+
+      async function sendInput(endpoint) {
+        try {
+          await fetch(endpoint, { method: "POST" });
+        } catch (err) {
+          console.warn(`Input error for ${endpoint}:`, err);
+        }
+      }
+
+      // Click/tap anywhere on the video area -> /space
+      let lastClickTime = 0;
+      const CLICK_DEBOUNCE_MS = 150;
+
+      inputOverlay.addEventListener("click", () => {
+        const now = Date.now();
+        if (now - lastClickTime < CLICK_DEBOUNCE_MS) return;
+        lastClickTime = now;
+        sendInput("/space");
+      });
+
+      // Keyboard handling on window
+      window.addEventListener("keydown", (e) => {
+        let endpoint = null;
+
+        switch (e.key) {
+          case " ":
+          case "Spacebar":
+            endpoint = "/space";
+            break;
+          case "ArrowLeft":
+            endpoint = "/left";
+            break;
+          case "ArrowRight":
+            endpoint = "/right";
+            break;
+          case "ArrowUp":
+            endpoint = "/up";
+            break;
+          case "ArrowDown":
+            endpoint = "/down";
+            break;
+        }
+
+        if (!endpoint) return;
+
+        e.preventDefault();
+        sendInput(endpoint);
+      });
+
+      // ------- FULLSCREEN HANDLING -------
+
+      fsBtn.addEventListener("click", () => {
+        if (!document.fullscreenElement) {
+          container.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement) {
+          fsBtn.classList.add("fullscreen-hide");
+        } else {
+          fsBtn.classList.remove("fullscreen-hide");
+        }
+      });
+    </script>
+  </body>
+</html>
