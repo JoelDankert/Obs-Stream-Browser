@@ -2,11 +2,16 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import subprocess
 import os
+import json
+import threading
+import time
+from collections import deque
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
 
 ALLOWED_SUBNET = "10.66.66."   # Only allow WireGuard clients
+SHOUT_INTERVAL = 6  # seconds between shouts
 
 
 def run_script(name):
@@ -15,6 +20,40 @@ def run_script(name):
         subprocess.run([path])
     else:
         print(f"[WARN] Script not found: {path}")
+
+
+def run_shout(message: str):
+    path = os.path.join(HOSTCONTROL_DIR, "shout.sh")
+    if os.path.exists(path):
+        # Fire and forget so the server isn't blocked while the overlay is shown.
+        subprocess.Popen([path, message])
+    else:
+        print(f"[WARN] Shout script not found: {path}")
+
+
+# Simple shout queue to serialize overlays
+shout_queue = deque()
+shout_cv = threading.Condition()
+shout_stop = threading.Event()
+
+
+def shout_worker():
+    while not shout_stop.is_set():
+        with shout_cv:
+            while not shout_queue and not shout_stop.is_set():
+                shout_cv.wait()
+            if shout_stop.is_set():
+                break
+            message = shout_queue.popleft()
+        try:
+            run_shout(message)
+        except Exception as e:
+            print(f"[WARN] shout error: {e}")
+        # throttle to one shout every SHOUT_INTERVAL seconds
+        for _ in range(int(SHOUT_INTERVAL * 10)):
+            if shout_stop.is_set():
+                break
+            time.sleep(0.1)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -43,7 +82,12 @@ class Handler(SimpleHTTPRequestHandler):
             "/down":  "down.sh"
         }
 
+        if self.path == "/shout":
+            self._handle_shout()
+            return
+
         if self.path in mapping:
+            print(f"got request at {self.path}");  
             run_script(mapping[self.path])
             self.send_response(200)
             self.end_headers()
@@ -67,12 +111,77 @@ class Handler(SimpleHTTPRequestHandler):
             return os.path.join(BASE, "stream", "index.html")
         return os.path.join(BASE, "stream", path.lstrip("/"))
 
+    def _handle_shout(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        try:
+            raw = self.rfile.read(length)
+        except Exception:
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception:
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        message = data.get("message", "")
+        if not isinstance(message, str):
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        sanitized = " ".join(message.strip().split())
+        if not sanitized:
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        MAX_LEN = 280
+        if len(sanitized) > MAX_LEN:
+            sanitized = sanitized[:MAX_LEN]
+
+        if sanitized.startswith("."):
+            final_msg = sanitized[1:].lstrip()
+        else:
+            final_msg = sanitized.upper()
+
+        if not final_msg:
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        print("got request at /shout")
+        print(final_msg)
+        with shout_cv:
+            shout_queue.append(final_msg)
+            shout_cv.notify()
+
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
 
 if __name__ == "__main__":
+    worker = threading.Thread(target=shout_worker, daemon=True)
+    worker.start()
+
     server = HTTPServer(("0.0.0.0", 8090), Handler)
     print("Server running on port 8090 (WireGuard-only)...")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down...")
+    finally:
+        shout_stop.set()
+        with shout_cv:
+            shout_cv.notify_all()
+        worker.join(timeout=2)
         server.server_close()

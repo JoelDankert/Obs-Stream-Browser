@@ -1,2 +1,2 @@
 #!/bin/bash
-xdotool key space
+playerctl play-pause

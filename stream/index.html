@@ -1,4 +1,5 @@
 
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -23,31 +24,11 @@
 }
 
 /* Video frame */
-#webrtcFrame {
+#player {
   border: 0;
   background: #000;
   width: min(100vw, calc(100vh * 16 / 9));
   height: min(100vh, calc(100vw * 9 / 16));
-}
-
-/* Click layer: matches video width, top 90% of video height */
-#inputOverlay {
-  position: absolute;
-  z-index: 5;
-  cursor: pointer;
-
-  /* same width as video */
-  width: min(100vw, calc(100vh * 16 / 9));
-
-  /* 90% of the video height */
-  height: calc(min(100vh, calc(100vw * 9 / 16)) * 0.9);
-
-  /* align horizontally with video center */
-  left: 50%;
-  /* vertically use video center but nudge up so it covers top 90% */
-  top: 50%;
-  transform: translate(-50%, -55.56%); /* ~5% of video height above center */
-  background: transparent;
 }
 
 /* Fullscreen button stays on top */
@@ -80,19 +61,51 @@
         opacity: 0;
         pointer-events: none;
       }
+
+      /* Shout composer */
+      #shoutComposer {
+        position: absolute;
+        top: 45%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(420px, 90vw);
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 12px;
+        padding: 8px 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(6px);
+        z-index: 12;
+      }
+      #shoutComposer.hidden {
+        display: none;
+      }
+      #shoutInput {
+        width: 95%;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        color: white;
+        padding: 8px 10px;
+        font-size: 16px;
+        outline: none;
+      }
+      #shoutInput:focus {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.14);
+      }
     </style>
   </head>
-  <body>
+  <body tabindex="-1">
     <div id="container">
-      <!-- MediaMTX WebRTC player -->
-      <iframe
-        id="webrtcFrame"
-        src="http://10.66.66.1:8889/stream"
-        allow="autoplay; fullscreen"
-      ></iframe>
-
-      <!-- Click layer for /space -->
-      <div id="inputOverlay"></div>
+      <!-- MediaMTX WebRTC player (native video) -->
+      <video
+        id="player"
+        autoplay
+        playsinline
+        controls
+        muted
+      ></video>
 
       <!-- Fullscreen button -->
       <div id="fsBtn" title="Fullscreen">
@@ -102,12 +115,145 @@
           />
         </svg>
       </div>
+
+      <!-- Shout composer (Enter to open, Enter to send) -->
+      <div id="shoutComposer" class="hidden">
+        <input
+          id="shoutInput"
+          type="text"
+          maxlength="140"
+          autocomplete="off"
+          placeholder="meme overlay (TOP TEXT/BOTTOM TEXT)"
+        />
+      </div>
     </div>
 
     <script>
       const fsBtn = document.getElementById("fsBtn");
       const container = document.getElementById("container");
-      const inputOverlay = document.getElementById("inputOverlay");
+      const body = document.body;
+      const player = document.getElementById("player");
+      const shoutComposer = document.getElementById("shoutComposer");
+      const shoutInput = document.getElementById("shoutInput");
+      let shoutOpen = false;
+
+      // ------- WEBRTC (WHEP) PLAYBACK -------
+
+      const PATH_NAME = "stream";
+      const MEDIA_BASE = `${window.location.protocol}//${window.location.hostname}:8889`;
+      const WEBRTC_PATHS = [
+        `/${PATH_NAME}/whep`, // WHEP (newer)
+        `/whep/${PATH_NAME}`, // alternate layout
+        `/${PATH_NAME}`, // legacy JSON/SDP endpoint
+      ];
+      let pc;
+
+      async function waitForIceGatheringComplete(connection) {
+        if (connection.iceGatheringState === "complete") return;
+        await new Promise((resolve) => {
+          const checkState = () => {
+            if (connection.iceGatheringState === "complete") {
+              connection.removeEventListener("icegatheringstatechange", checkState);
+              resolve();
+            }
+          };
+          connection.addEventListener("icegatheringstatechange", checkState);
+        });
+      }
+
+      async function fetchAnswer(sdp) {
+        for (const path of WEBRTC_PATHS) {
+          const url = `${MEDIA_BASE}${path}`;
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/sdp" },
+              body: sdp,
+            });
+            if (res.ok) {
+              return res.text();
+            }
+          } catch (_) {
+            /* try next path */
+          }
+        }
+        throw new Error("All WebRTC endpoints failed");
+      }
+
+      async function startPlayback() {
+        pc = new RTCPeerConnection();
+        pc.addTransceiver("video", { direction: "recvonly" });
+        pc.addTransceiver("audio", { direction: "recvonly" });
+
+        pc.addEventListener("track", (event) => {
+          if (event.streams && event.streams[0]) {
+            player.srcObject = event.streams[0];
+            player.play().catch(() => {});
+          }
+        });
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitForIceGatheringComplete(pc);
+
+        const answer = await fetchAnswer(pc.localDescription.sdp);
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answer }));
+      }
+
+      startPlayback().catch((err) => {
+        console.error("WebRTC playback failed", err);
+      });
+
+      // Keep page focused so key events stay here even after interacting with the player UI
+      body.focus();
+      player.setAttribute("tabindex", "-1");
+      player.addEventListener("pointerup", () => setTimeout(() => body.focus(), 0));
+      window.addEventListener("focus", () => body.focus());
+      window.addEventListener("blur", () => {
+        if (document.activeElement === player) {
+          setTimeout(() => body.focus(), 0);
+        }
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (pc) {
+          pc.close();
+        }
+      });
+
+      // ------- SHOUT / OVERLAY MESSAGE -------
+
+      function openShoutComposer() {
+        shoutOpen = true;
+        shoutInput.value = "";
+        shoutComposer.classList.remove("hidden");
+        setTimeout(() => shoutInput.focus(), 0);
+      }
+
+      function closeShoutComposer() {
+        shoutOpen = false;
+        shoutComposer.classList.add("hidden");
+        shoutInput.blur();
+        body.focus();
+      }
+
+      async function submitShout() {
+        const message = shoutInput.value.trim();
+        if (!message) {
+          closeShoutComposer();
+          return;
+        }
+        try {
+          await fetch("/shout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          });
+        } catch (err) {
+          console.warn("Shout send failed", err);
+        }
+        closeShoutComposer();
+      }
 
       // ------- INPUT HANDLING (same behavior as before) -------
 
@@ -119,19 +265,29 @@
         }
       }
 
-      // Click/tap anywhere on the video area -> /space
-      let lastClickTime = 0;
-      const CLICK_DEBOUNCE_MS = 150;
-
-      inputOverlay.addEventListener("click", () => {
-        const now = Date.now();
-        if (now - lastClickTime < CLICK_DEBOUNCE_MS) return;
-        lastClickTime = now;
-        sendInput("/space");
-      });
 
       // Keyboard handling on window
       window.addEventListener("keydown", (e) => {
+        if (shoutOpen) {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            closeShoutComposer();
+            return;
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submitShout();
+            return;
+          }
+          return; // allow typing inside the input
+        }
+
+        if (e.key === "Enter") {
+          e.preventDefault();
+          openShoutComposer();
+          return;
+        }
+
         let endpoint = null;
 
         switch (e.key) {
