@@ -36,6 +36,10 @@ shout_queue = deque()
 shout_cv = threading.Condition()
 shout_stop = threading.Event()
 
+# Track perceived online clients by IP (best-effort)
+presence_ips = set()
+presence_lock = threading.Lock()
+
 
 def shout_worker():
     while not shout_stop.is_set():
@@ -84,6 +88,9 @@ class Handler(SimpleHTTPRequestHandler):
 
         if self.path == "/shout":
             self._handle_shout()
+            return
+        if self.path == "/presence":
+            self._handle_presence()
             return
 
         if self.path in mapping:
@@ -164,6 +171,37 @@ class Handler(SimpleHTTPRequestHandler):
             shout_queue.append(final_msg)
             shout_cv.notify()
 
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def _handle_presence(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body = b""
+        if length > 0:
+            try:
+                body = self.rfile.read(length)
+            except Exception:
+                body = b""
+        event = "unknown"
+        if body:
+            try:
+                data = json.loads(body.decode("utf-8"))
+                event = data.get("event", event)
+            except Exception:
+                pass
+        ip = self.client_address[0]
+        last_octet = ip.split(".")[-1] if "." in ip else ip
+        with presence_lock:
+            if event == "join":
+                presence_ips.add(ip)
+            elif event == "leave":
+                presence_ips.discard(ip)
+            count = len(presence_ips)
+            octets = [p.split(".")[-1] if "." in p else p for p in sorted(presence_ips)]
+            current_ips = ", ".join(octets)
+        print(f"{ip} {event}")
+        print(f"online: {count} [{current_ips}]")
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")

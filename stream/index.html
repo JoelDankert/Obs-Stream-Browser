@@ -219,6 +219,7 @@
         if (pc) {
           pc.close();
         }
+        sendPresence("leave");
       });
 
       // ------- SHOUT / OVERLAY MESSAGE -------
@@ -256,6 +257,22 @@
       }
 
       // ------- INPUT HANDLING (same behavior as before) -------
+
+      function sendPresence(eventType) {
+        const payload = JSON.stringify({ event: eventType });
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: "application/json" });
+          navigator.sendBeacon("/presence", blob);
+        } else {
+          fetch("/presence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+          }).catch(() => {});
+        }
+      }
+
+      sendPresence("join");
 
       async function sendInput(endpoint) {
         try {
