@@ -78,6 +78,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
+
         mapping = {
             "/space": "space.sh",
             "/left":  "left.sh",
@@ -94,7 +96,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if self.path in mapping:
-            print(f"got request at {self.path}");  
+            print(f"{ip_suffix}: sent request at {self.path}")
             run_script(mapping[self.path])
             self.send_response(200)
             self.end_headers()
@@ -165,8 +167,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        print("got request at /shout")
-        print(final_msg)
+        ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
+        print(f"{ip_suffix}: sent request at /shout")
+        print(f"{ip_suffix}: {final_msg}")
         with shout_cv:
             shout_queue.append(final_msg)
             shout_cv.notify()
