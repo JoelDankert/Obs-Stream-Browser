@@ -11,7 +11,6 @@
         background: #111;
     }
 
-    /* Fullscreen 3x3 grid */
     .grid {
         height: 100%;
         width: 100%;
@@ -34,16 +33,63 @@
         border-radius: 0;
         /* no hover, no active states */
     }
-
+    /* Minimal inline text box (mirrors player page) */
+    #shoutComposer {
+        position: fixed;
+        top: 45%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(440px, 92vw);
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 10px;
+        padding: 8px 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        z-index: 12;
+    }
+    #shoutComposer.hidden {
+        display: none;
+    }
+    #shoutInput {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        color: white;
+        padding: 8px 10px;
+        font-size: 16px;
+        outline: none;
+        min-width: 0;
+    }
+    #shoutInput:focus {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.14);
+    }
+    #shoutSubmit {
+        background: #000;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 15px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    #shoutSubmit:active {
+        background: #111;
+    }
 </style>
 </head>
 
 <body>
 
 <div class="grid">
-    <div class="btn" onclick="toggleFullscreen()">FULL</div>
+    <div class="btn fs-btn" onclick="toggleFullscreen()">FULL</div>
     <div class="btn" onclick="send('/up')">UP</div>
-    <div class="btn" onclick="sendText()">TEXT</div>
+    <div class="btn" onclick="openShoutComposer()">TEXT</div>
 
     <div class="btn" onclick="send('/left')">LEFT</div>
     <div class="btn" onclick="send('/space')">SPACE</div>
@@ -54,17 +100,51 @@
     <div></div>
 </div>
 
+<div id="shoutComposer" class="hidden">
+    <input
+        id="shoutInput"
+        type="text"
+        maxlength="140"
+        placeholder=""
+    />
+    <button id="shoutSubmit" type="button" onclick="submitShout()">Send</button>
+</div>
+
 <script>
 async function send(path) {
     try { await fetch(path, { method: "POST" }); }
     catch (e) { console.error(e); }
 }
 
-async function sendText() {
-    const input = prompt("Send text (use '/' for bottom line):");
-    if (!input) return;
-    const message = input.trim().slice(0, 140);
-    if (!message) return;
+const shoutComposer = document.getElementById("shoutComposer");
+const shoutInput = document.getElementById("shoutInput");
+let shoutOpen = false;
+
+// Keep page focused so key events always land here, even after taps/clicks
+document.body.setAttribute("tabindex", "-1");
+document.body.focus();
+window.addEventListener("pointerup", () => setTimeout(() => document.body.focus(), 0));
+window.addEventListener("focus", () => document.body.focus());
+
+function openShoutComposer() {
+    shoutOpen = true;
+    shoutInput.value = "";
+    shoutComposer.classList.remove("hidden");
+    setTimeout(() => shoutInput.focus(), 0);
+}
+
+function closeShoutComposer() {
+    shoutOpen = false;
+    shoutComposer.classList.add("hidden");
+    shoutInput.blur();
+}
+
+async function submitShout() {
+    const message = shoutInput.value.trim();
+    if (!message) {
+        closeShoutComposer();
+        return;
+    }
     try {
         await fetch("/shout", {
             method: "POST",
@@ -74,23 +154,66 @@ async function sendText() {
     } catch (e) {
         console.error("shout failed", e);
     }
+    closeShoutComposer();
 }
+
+shoutInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        submitShout();
+    } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeShoutComposer();
+    }
+});
 
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
+        setTimeout(() => window.scrollTo(0, 0), 0);
     } else {
         document.exitFullscreen().catch(() => {});
     }
 }
 
 document.addEventListener("fullscreenchange", () => {
-    const fsBtn = document.querySelector(".fs-btn");
-    if (document.fullscreenElement) {
-        fsBtn.classList.add("hide");
-    } else {
-        fsBtn.classList.remove("hide");
+    // Keep FULL button visible so it can be used to exit fullscreen
+});
+
+// Mirror the main player keyboard controls here too
+window.addEventListener("keydown", (e) => {
+    if (shoutOpen) return; // input handles its own keys
+
+    if (e.key === "Enter") {
+        e.preventDefault();
+        openShoutComposer();
+        return;
     }
+
+    let path = null;
+    switch (e.key) {
+        case " ":
+        case "Spacebar":
+            path = "/space";
+            break;
+        case "ArrowLeft":
+            path = "/left";
+            break;
+        case "ArrowRight":
+            path = "/right";
+            break;
+        case "ArrowUp":
+            path = "/up";
+            break;
+        case "ArrowDown":
+            path = "/down";
+            break;
+    }
+
+    if (!path) return;
+
+    e.preventDefault();
+    send(path);
 });
 </script>
 
