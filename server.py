@@ -11,7 +11,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
 
 ALLOWED_SUBNET = "10.66.66."   # Only allow WireGuard clients
-SHOUT_INTERVAL = 6  # seconds between shouts
+SHOUT_INTERVAL = 4  # seconds between shouts
 
 
 def run_script(name):
