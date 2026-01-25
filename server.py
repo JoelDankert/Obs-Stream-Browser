@@ -5,6 +5,7 @@ import os
 import json
 import threading
 from collections import deque
+import re
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
@@ -13,6 +14,7 @@ ALLOWED_SUBNET = "10.66.66."   # Only allow WireGuard clients
 SHOUT_DURATION_PER_CHAR_MS = 120
 SHOUT_DURATION_MIN_MS = 2500
 SHOUT_DURATION_MAX_MS = 9000
+IMAGE_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def run_script(name):
@@ -150,11 +152,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        MAX_LEN = 280
-        if len(sanitized) > MAX_LEN:
-            sanitized = sanitized[:MAX_LEN]
-
-        if sanitized.startswith("."):
+        if IMAGE_URL_RE.match(sanitized):
+            final_msg = sanitized
+        elif sanitized.startswith("."):
             final_msg = sanitized[1:].lstrip()
         else:
             final_msg = sanitized.upper()
@@ -164,13 +164,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        duration_ms = max(
-            SHOUT_DURATION_MIN_MS,
-            min(
-                len(final_msg) * SHOUT_DURATION_PER_CHAR_MS,
-                SHOUT_DURATION_MAX_MS,
-            ),
-        )
+        duration_ms = 5000
 
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
         print(f"{ip_suffix}: sent request at /shout")
