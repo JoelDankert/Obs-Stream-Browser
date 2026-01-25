@@ -7,7 +7,7 @@ set -euo pipefail
 MSG="${*:-}"
 [ -z "$MSG" ] && exit 0
 
-DURATION_MS="${DURATION_MS:-5000}"
+DURATION_MS="${DURATION_MS:-3000}"
 
 if command -v python3 >/dev/null 2>&1; then
   python3 - "$MSG" "$DURATION_MS" <<'PY'
@@ -358,7 +358,7 @@ if show_image_if_url(msg.strip()):
             root.destroy()
     if image_win:
         image_win.bind("<Button-1>", _close_all)
-        image_win.after(5000, _close_all)
+        image_win.after(3000, _close_all)
     root.mainloop()
     sys.exit(0)
 

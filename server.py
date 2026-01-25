@@ -164,7 +164,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        duration_ms = 5000
+        duration_ms = 3000
 
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
         print(f"{ip_suffix}: sent request at /shout")
