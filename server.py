@@ -4,14 +4,15 @@ import subprocess
 import os
 import json
 import threading
-import time
 from collections import deque
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
 
 ALLOWED_SUBNET = "10.66.66."   # Only allow WireGuard clients
-SHOUT_INTERVAL = 4  # seconds between shouts
+SHOUT_DURATION_PER_CHAR_MS = 120
+SHOUT_DURATION_MIN_MS = 2500
+SHOUT_DURATION_MAX_MS = 9000
 
 
 def run_script(name):
@@ -22,11 +23,12 @@ def run_script(name):
         print(f"[WARN] Script not found: {path}")
 
 
-def run_shout(message: str):
+def run_shout(message: str, duration_ms: int):
     path = os.path.join(HOSTCONTROL_DIR, "shout.sh")
     if os.path.exists(path):
-        # Fire and forget so the server isn't blocked while the overlay is shown.
-        subprocess.Popen([path, message])
+        env = os.environ.copy()
+        env["DURATION_MS"] = str(duration_ms)
+        subprocess.run([path, message], env=env, check=False)
     else:
         print(f"[WARN] Shout script not found: {path}")
 
@@ -48,16 +50,11 @@ def shout_worker():
                 shout_cv.wait()
             if shout_stop.is_set():
                 break
-            message = shout_queue.popleft()
+            message, duration_ms = shout_queue.popleft()
         try:
-            run_shout(message)
+            run_shout(message, duration_ms)
         except Exception as e:
             print(f"[WARN] shout error: {e}")
-        # throttle to one shout every SHOUT_INTERVAL seconds
-        for _ in range(int(SHOUT_INTERVAL * 10)):
-            if shout_stop.is_set():
-                break
-            time.sleep(0.1)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -167,11 +164,19 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        duration_ms = max(
+            SHOUT_DURATION_MIN_MS,
+            min(
+                len(final_msg) * SHOUT_DURATION_PER_CHAR_MS,
+                SHOUT_DURATION_MAX_MS,
+            ),
+        )
+
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
         print(f"{ip_suffix}: sent request at /shout")
         print(f"{ip_suffix}: {final_msg}")
         with shout_cv:
-            shout_queue.append(final_msg)
+            shout_queue.append((final_msg, duration_ms))
             shout_cv.notify()
 
         self.send_response(200)
@@ -179,6 +184,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def _handle_presence(self):
+        return
         length = int(self.headers.get("Content-Length", "0"))
         body = b""
         if length > 0:

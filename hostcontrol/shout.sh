@@ -7,10 +7,10 @@ set -euo pipefail
 MSG="${*:-}"
 [ -z "$MSG" ] && exit 0
 
-DURATION_MS="${DURATION_MS:-3000}"
+DURATION_MS="${DURATION_MS:-5000}"
 
 if command -v python3 >/dev/null 2>&1; then
-  python3 - "$MSG" "$DURATION_MS" <<'PY' &
+  python3 - "$MSG" "$DURATION_MS" <<'PY'
 import subprocess
 import sys
 try:
@@ -23,7 +23,7 @@ msg = sys.argv[1]
 try:
     duration = int(float(sys.argv[2]))
 except Exception:
-    duration = 5000
+    duration = 100
 
 
 def get_right_monitor():
