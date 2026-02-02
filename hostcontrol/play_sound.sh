@@ -4,7 +4,7 @@ set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")/sounds" && pwd)"
 SOUND_DIR="$BASE_DIR"
 
-VOLUME="0.3"
+VOLUME="1.0"
 
 rate_limit() {
   local lock="$BASE_DIR/.play.lock"
