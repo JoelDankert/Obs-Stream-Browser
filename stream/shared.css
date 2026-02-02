@@ -1,0 +1,39 @@
+:root {
+  --sound-popup-bg: rgba(0, 0, 0, 0.55);
+  --sound-popup-border: rgba(255, 255, 255, 0.12);
+  --sound-popup-radius: 8px;
+  --sound-popup-padding: 4px 6px;
+  --sound-popup-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --sound-popup-font-size: 13px;
+  --sound-item-padding: 2px 4px;
+  --sound-item-radius: 4px;
+}
+
+.sound-popup {
+  margin-top: 8px;
+  background: var(--sound-popup-bg);
+  border: 1px solid var(--sound-popup-border);
+  border-radius: var(--sound-popup-radius);
+  padding: var(--sound-popup-padding);
+  max-height: 160px;
+  overflow-y: auto;
+  color: #fff;
+  font-size: var(--sound-popup-font-size);
+  box-shadow: var(--sound-popup-shadow);
+  contain: content;
+  content-visibility: auto;
+}
+
+.sound-popup.hidden {
+  display: none;
+}
+
+.sound-item {
+  padding: var(--sound-item-padding);
+  border-radius: var(--sound-item-radius);
+  white-space: nowrap;
+}
+
+.sound-item.selected {
+  font-weight: 700;
+}

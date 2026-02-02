@@ -1,4 +1,2 @@
 #!/bin/bash
-
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-"$BASE_DIR/play_sound.sh" 'positive*.mp3'
+pkill -f "pw-play" >/dev/null 2>&1 || true

@@ -2,11 +2,7 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")/sounds" && pwd)"
-if [ -d "$BASE_DIR/trimmed" ]; then
-  SOUND_DIR="$BASE_DIR/trimmed"
-else
-  SOUND_DIR="$BASE_DIR"
-fi
+SOUND_DIR="$BASE_DIR"
 
 VOLUME="0.3"
 

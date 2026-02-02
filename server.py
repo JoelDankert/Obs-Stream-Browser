@@ -34,6 +34,12 @@ def run_shout(message: str, duration_ms: int):
     else:
         print(f"[WARN] Shout script not found: {path}")
 
+def play_named_sound(name: str):
+    path = os.path.join(HOSTCONTROL_DIR, "play_sound.sh")
+    if os.path.exists(path):
+        subprocess.run([path, f"{name}.*"], check=False)
+    else:
+        print(f"[WARN] play_sound.sh not found: {path}")
 
 # Simple shout queue to serialize overlays
 shout_queue = deque()
@@ -111,6 +117,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        if self.path == "/soundlist":
+            self._handle_soundlist()
+            return
+
         super().do_GET()
 
     # Keep file serving inside ./stream
@@ -152,6 +162,17 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
+        if sanitized.startswith("#"):
+            sound = sanitized[1:].strip()
+            if not sound:
+                self.send_response(400)
+                self.end_headers()
+                return
+            play_named_sound(sound)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+            return
         if IMAGE_URL_RE.match(sanitized):
             final_msg = sanitized
         elif sanitized.startswith("."):
@@ -208,6 +229,33 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
+
+    def _handle_soundlist(self):
+        sounds_dir = os.path.join(HOSTCONTROL_DIR, "sounds")
+        trimmed_dir = os.path.join(sounds_dir, "trimmed")
+        base_dir = trimmed_dir if os.path.isdir(trimmed_dir) else sounds_dir
+        names = []
+        try:
+            for fname in os.listdir(base_dir):
+                path = os.path.join(base_dir, fname)
+                if not os.path.isfile(path):
+                    continue
+                if fname.startswith("."):
+                    continue
+                stem, ext = os.path.splitext(fname)
+                if not stem:
+                    continue
+                names.append(stem)
+        except Exception:
+            names = []
+
+        unique = sorted(set(names))
+        body = json.dumps({"sounds": unique}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Control</title>
+<link rel="stylesheet" href="/shared.css" />
 <style>
     html, body {
         margin: 0;
@@ -46,8 +47,9 @@
         padding: 8px 10px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
         z-index: 12;
     }
     #shoutComposer.hidden {
@@ -67,19 +69,6 @@
     #shoutInput:focus {
         border-color: rgba(255, 255, 255, 0.35);
         background: rgba(255, 255, 255, 0.14);
-    }
-    #shoutSubmit {
-        background: #000;
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        padding: 10px 14px;
-        font-size: 15px;
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    #shoutSubmit:active {
-        background: #111;
     }
 </style>
 </head>
@@ -104,10 +93,8 @@
     <input
         id="shoutInput"
         type="text"
-        maxlength="140"
-        placeholder=""
     />
-    <button id="shoutSubmit" type="button" onclick="submitShout()">Send</button>
+    <div id="soundPopup" class="sound-popup hidden"></div>
 </div>
 
 <script>
@@ -118,7 +105,11 @@ async function send(path) {
 
 const shoutComposer = document.getElementById("shoutComposer");
 const shoutInput = document.getElementById("shoutInput");
+const soundPopup = document.getElementById("soundPopup");
 let shoutOpen = false;
+let soundList = null;
+let filteredSounds = [];
+let selectedSoundIndex = -1;
 
 // Keep page focused so key events always land here, even after taps/clicks
 document.body.setAttribute("tabindex", "-1");
@@ -136,6 +127,7 @@ function openShoutComposer() {
 function closeShoutComposer() {
     shoutOpen = false;
     shoutComposer.classList.add("hidden");
+    soundPopup.classList.add("hidden");
     shoutInput.blur();
 }
 
@@ -157,14 +149,100 @@ async function submitShout() {
     closeShoutComposer();
 }
 
+async function loadSoundList() {
+    if (soundList) return soundList;
+    try {
+        const res = await fetch("/soundlist");
+        if (!res.ok) return [];
+        const data = await res.json();
+        soundList = Array.isArray(data.sounds) ? data.sounds : [];
+    } catch (_) {
+        soundList = [];
+    }
+    return soundList;
+}
+
+function renderSoundPopup(items) {
+    filteredSounds = items;
+    if (!items.length) {
+        soundPopup.classList.add("hidden");
+        soundPopup.replaceChildren();
+        selectedSoundIndex = -1;
+        return;
+    }
+    selectedSoundIndex = Math.min(Math.max(selectedSoundIndex, 0), items.length - 1);
+    const fragment = document.createDocumentFragment();
+    for (let idx = 0; idx < items.length; idx += 1) {
+        const name = items[idx];
+        const item = document.createElement("div");
+        item.className = "sound-item" + (idx === selectedSoundIndex ? " selected" : "");
+        item.dataset.name = name;
+        item.textContent = name;
+        fragment.appendChild(item);
+    }
+    soundPopup.replaceChildren(fragment);
+    soundPopup.classList.remove("hidden");
+}
+
+async function updateSoundPopup() {
+    const value = shoutInput.value.trim();
+    if (!value.startsWith("#")) {
+        soundPopup.classList.add("hidden");
+        return;
+    }
+    const all = await loadSoundList();
+    if (value === "#" || value === "# ") {
+        selectedSoundIndex = 0;
+        renderSoundPopup(all);
+        return;
+    }
+    const needle = value.slice(1).toLowerCase();
+    const filtered = all.filter((name) => name.toLowerCase().startsWith(needle));
+    selectedSoundIndex = 0;
+    renderSoundPopup(filtered);
+}
+
+function selectFirstSound() {
+    if (!filteredSounds.length) return false;
+    const name = filteredSounds[Math.max(selectedSoundIndex, 0)];
+    shoutInput.value = `#${name}`;
+    return true;
+}
+
+function moveSoundSelection(delta) {
+    if (!filteredSounds.length) return;
+    selectedSoundIndex = (selectedSoundIndex + delta + filteredSounds.length) % filteredSounds.length;
+    renderSoundPopup(filteredSounds);
+    const selected = soundPopup.querySelector(".sound-item.selected");
+    if (selected) {
+        selected.scrollIntoView({ block: "nearest" });
+    }
+}
+
 shoutInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
+        if (shoutInput.value.trim().startsWith("#")) {
+            selectFirstSound();
+        }
         submitShout();
     } else if (e.key === "Escape") {
         e.preventDefault();
         closeShoutComposer();
+    } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveSoundSelection(1);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveSoundSelection(-1);
+    } else if (e.key === "Tab") {
+        e.preventDefault();
+        moveSoundSelection(e.shiftKey ? -1 : 1);
     }
+});
+
+shoutInput.addEventListener("input", () => {
+    updateSoundPopup();
 });
 
 function toggleFullscreen() {
@@ -187,6 +265,13 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
         openShoutComposer();
+        return;
+    }
+    if (e.key === "#") {
+        e.preventDefault();
+        openShoutComposer();
+        shoutInput.value = "#";
+        updateSoundPopup();
         return;
     }
 

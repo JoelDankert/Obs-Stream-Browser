@@ -8,13 +8,15 @@ MSG="${*:-}"
 [ -z "$MSG" ] && exit 0
 
 DURATION_MS="${DURATION_MS:-3000}"
+IMAGE_MEDIA_CONTROL="${IMAGE_MEDIA_CONTROL:-0}"
 
 if command -v python3 >/dev/null 2>&1; then
-  python3 - "$MSG" "$DURATION_MS" <<'PY'
+  python3 - "$MSG" "$DURATION_MS" "$IMAGE_MEDIA_CONTROL" <<'PY'
 import os
 import subprocess
 import sys
 import tempfile
+import shutil
 try:
     import tkinter as tk
     import tkinter.font as tkfont
@@ -31,6 +33,10 @@ try:
     duration = int(float(sys.argv[2]))
 except Exception:
     duration = 100
+try:
+    image_media_control = int(sys.argv[3])
+except Exception:
+    image_media_control = 0
 
 
 def get_right_monitor():
@@ -350,11 +356,23 @@ def show_image_if_url(text: str) -> bool:
 
 
 if show_image_if_url(msg.strip()):
+    if image_media_control:
+        try:
+            subprocess.run(
+                ["/home/joeld/MediaMTX/hostcontrol/play_sound.sh", "meme*"],
+                check=False,
+            )
+        except Exception:
+            pass
+        if shutil.which("playerctl"):
+            subprocess.run(["playerctl", "pause"], check=False)
     def _close_all(_e=None):
         try:
             if image_win:
                 image_win.destroy()
         finally:
+            if image_media_control and shutil.which("playerctl"):
+                subprocess.run(["playerctl", "play"], check=False)
             root.destroy()
     if image_win:
         image_win.bind("<Button-1>", _close_all)
