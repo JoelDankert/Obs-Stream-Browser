@@ -114,8 +114,14 @@ let selectedSoundIndex = -1;
 // Keep page focused so key events always land here, even after taps/clicks
 document.body.setAttribute("tabindex", "-1");
 document.body.focus();
-window.addEventListener("pointerup", () => setTimeout(() => document.body.focus(), 0));
-window.addEventListener("focus", () => document.body.focus());
+window.addEventListener("pointerup", () => {
+    if (shoutOpen) return;
+    setTimeout(() => document.body.focus(), 0);
+});
+window.addEventListener("focus", () => {
+    if (shoutOpen) return;
+    document.body.focus();
+});
 
 function openShoutComposer() {
     shoutOpen = true;
