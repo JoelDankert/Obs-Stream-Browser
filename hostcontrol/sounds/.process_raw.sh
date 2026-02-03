@@ -35,7 +35,7 @@ for in_file in "${files[@]}"; do
 
   if ffmpeg -hide_banner -loglevel error -y \
       -i "$in_file" \
-      -af "loudnorm=I=-16:TP=-1.5:LRA=11,silenceremove=start_periods=1:start_silence=0.05:start_threshold=-45dB:stop_periods=1:stop_silence=0.20:stop_threshold=-45dB" \
+      -af "loudnorm=I=-16:TP=-1.5:LRA=11,silenceremove=start_periods=1:start_silence=0.15:start_threshold=-55dB:stop_periods=1:stop_silence=0.40:stop_threshold=-55dB" \
       -ar 48000 -ac 2 -b:a 192k \
       "$tmp_out"; then
     mv -f "$tmp_out" "$OUT_DIR/$name"
