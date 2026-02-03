@@ -37,7 +37,9 @@ def run_shout(message: str, duration_ms: int):
 def play_named_sound(name: str):
     path = os.path.join(HOSTCONTROL_DIR, "play_sound.sh")
     if os.path.exists(path):
-        subprocess.run([path, f"{name}.*"], check=False)
+        res = subprocess.run([path, f"{name}.*"], check=False)
+        if res.returncode != 0:
+            print(f"[WARN] play_sound.sh failed for: {name}")
     else:
         print(f"[WARN] play_sound.sh not found: {path}")
 
@@ -168,6 +170,9 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 return
+            ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
+            print(f"{ip_suffix}: sent request at /shout")
+            print(f"{ip_suffix}: # {sound}")
             play_named_sound(sound)
             self.send_response(200)
             self.end_headers()
