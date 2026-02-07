@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import shutil
+import base64
 try:
     import tkinter as tk
     import tkinter.font as tkfont
@@ -78,6 +79,7 @@ try:
 except Exception:
     pass
 image_win = None
+image_failed = False
 
 mon = get_right_monitor()
 if mon:
@@ -189,7 +191,7 @@ def build_window(text: str, y_pos: int):
 
 def split_image_message(text: str):
     text = text.strip()
-    if not (text.startswith("http://") or text.startswith("https://")):
+    if not (text.startswith("http://") or text.startswith("https://") or text.startswith("data:image/")):
         return None, ""
     parts = text.split(" ", 1)
     url = parts[0]
@@ -200,6 +202,7 @@ def split_image_message(text: str):
 def show_image_if_url(text: str) -> bool:
     global font_choice
     global image_win
+    global image_failed
     url, rest = split_image_message(text)
     if not url:
         return False
@@ -208,10 +211,20 @@ def show_image_if_url(text: str) -> bool:
     fd, path = tempfile.mkstemp(prefix="shout_img_", suffix=".img")
     os.close(fd)
     try:
-        subprocess.run(
-            ["curl", "-L", "--fail", "--silent", "--show-error", "--max-time", "6", "-o", path, url],
-            check=True,
-        )
+        if url.startswith("data:image/"):
+            header, b64data = url.split(",", 1)
+            if ";base64" in header:
+                raw = base64.b64decode(b64data, validate=True)
+                with open(path, "wb") as f:
+                    f.write(raw)
+            else:
+                with open(path, "wb") as f:
+                    f.write(b64data.encode("utf-8"))
+        else:
+            subprocess.run(
+                ["curl", "-L", "--fail", "--silent", "--show-error", "--max-time", "6", "-o", path, url],
+                check=True,
+            )
         img = Image.open(path)
         img = img.convert("RGBA")
     except Exception:
@@ -219,6 +232,7 @@ def show_image_if_url(text: str) -> bool:
             os.unlink(path)
         except Exception:
             pass
+        image_failed = True
         return False
 
     if rest:
@@ -379,6 +393,10 @@ if show_image_if_url(msg.strip()):
         image_win.after(3000, _close_all)
     root.mainloop()
     sys.exit(0)
+elif image_failed:
+    msg = "IMAGE NOT READABLE"
+    top_text, bottom_text = split_message(msg)
+    font_choice = ("Arial", pick_font_size(len(top_text)), "bold")
 
 
 # Build top window

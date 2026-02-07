@@ -15,6 +15,7 @@ SHOUT_DURATION_PER_CHAR_MS = 120
 SHOUT_DURATION_MIN_MS = 2500
 SHOUT_DURATION_MAX_MS = 9000
 IMAGE_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+DATA_IMAGE_RE = re.compile(r"^data:image/", re.IGNORECASE)
 
 
 def run_script(name):
@@ -178,7 +179,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"OK")
             return
-        if IMAGE_URL_RE.match(sanitized):
+        if DATA_IMAGE_RE.match(sanitized):
+            final_msg = sanitized
+        elif IMAGE_URL_RE.match(sanitized):
             final_msg = sanitized
         elif sanitized.startswith("."):
             final_msg = sanitized[1:].lstrip()
