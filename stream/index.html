@@ -278,6 +278,60 @@
         return soundList;
       }
 
+      function normalizeSearchValue(value) {
+        return value
+          .toLowerCase()
+          .replace(/[_-]+/g, " ")
+          .replace(/[^a-z0-9 ]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function isSubsequence(needle, haystack) {
+        if (!needle) return true;
+        let i = 0;
+        for (let j = 0; j < haystack.length && i < needle.length; j += 1) {
+          if (needle[i] === haystack[j]) i += 1;
+        }
+        return i === needle.length;
+      }
+
+      function scoreSoundMatch(name, query) {
+        const normalizedName = normalizeSearchValue(name);
+        const normalizedQuery = normalizeSearchValue(query);
+        if (!normalizedName || !normalizedQuery) return -1;
+
+        const nameTokens = normalizedName.split(" ").filter(Boolean);
+        const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+        const compactName = nameTokens.join("");
+        const compactQuery = queryTokens.join("");
+
+        for (const token of queryTokens) {
+          const tokenMatches =
+            nameTokens.some((nameToken) => nameToken.includes(token)) || compactName.includes(token);
+          if (!tokenMatches) return -1;
+        }
+
+        let score = 0;
+        if (normalizedName === normalizedQuery) score += 1000;
+        if (normalizedName.startsWith(normalizedQuery)) score += 700;
+        if (compactName.startsWith(compactQuery)) score += 650;
+        if (compactName.includes(compactQuery)) score += 500;
+        if (isSubsequence(compactQuery, compactName)) score += 250;
+
+        for (const token of queryTokens) {
+          if (nameTokens.some((nameToken) => nameToken === token)) {
+            score += 120;
+          } else if (nameTokens.some((nameToken) => nameToken.startsWith(token))) {
+            score += 90;
+          } else if (nameTokens.some((nameToken) => nameToken.includes(token))) {
+            score += 60;
+          }
+        }
+
+        return score - normalizedName.length * 0.01;
+      }
+
       function renderSoundPopup(items) {
         filteredSounds = items;
         if (!items.length) {
@@ -313,7 +367,11 @@
           return;
         }
         const needle = value.slice(1).toLowerCase();
-        const filtered = all.filter((name) => name.toLowerCase().startsWith(needle));
+        const filtered = all
+          .map((name) => ({ name, score: scoreSoundMatch(name, needle) }))
+          .filter((entry) => entry.score >= 0)
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+          .map((entry) => entry.name);
         selectedSoundIndex = 0;
         renderSoundPopup(filtered);
       }
