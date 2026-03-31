@@ -106,7 +106,7 @@
         align-items: center;
         justify-content: center;
         padding: 24px;
-        background: rgba(0, 0, 0, 0.72);
+        background: #000;
         z-index: 11;
       }
       #statusMessage.visible {
@@ -259,14 +259,10 @@
         statusTitle.textContent = message;
         statusMessage.classList.toggle("denied", variant === "denied");
         statusMessage.classList.add("visible");
-        fsBtn.classList.add("fullscreen-hide");
       }
 
       function hideStatus() {
         statusMessage.classList.remove("visible");
-        if (!document.fullscreenElement) {
-          fsBtn.classList.remove("fullscreen-hide");
-        }
       }
 
       function clearPlaybackTimers() {
@@ -361,6 +357,7 @@
               clearTimeout(startupTimer);
               startupTimer = null;
             }
+            showStatus("stream found, loading");
             statusHideTimer = setTimeout(() => {
               statusHideTimer = null;
               hideStatus();
