@@ -258,10 +258,14 @@
         statusTitle.textContent = message;
         statusMessage.classList.toggle("denied", variant === "denied");
         statusMessage.classList.add("visible");
+        fsBtn.classList.add("fullscreen-hide");
       }
 
       function hideStatus() {
         statusMessage.classList.remove("visible");
+        if (!document.fullscreenElement) {
+          fsBtn.classList.remove("fullscreen-hide");
+        }
       }
 
       function clearPlaybackTimers() {
