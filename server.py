@@ -6,16 +6,38 @@ import json
 import threading
 from collections import deque
 import re
+from pathlib import Path
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
-
-ALLOWED_SUBNET = "10.66.66."   # Only allow WireGuard clients
+RUNTIME_DIR = os.path.join(BASE, "runtime")
+ALLOWLIST_PATH = os.path.join(RUNTIME_DIR, "access.json")
+LOCALHOST_IPS = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 SHOUT_DURATION_PER_CHAR_MS = 120
 SHOUT_DURATION_MIN_MS = 2500
 SHOUT_DURATION_MAX_MS = 9000
 IMAGE_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 DATA_IMAGE_RE = re.compile(r"^data:image/", re.IGNORECASE)
+
+
+def load_access_config():
+    try:
+        data = json.loads(Path(ALLOWLIST_PATH).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"mode": "all", "ips": []}
+    except Exception as exc:
+        print(f"[WARN] Failed to load access config: {exc}")
+        return {"mode": "all", "ips": []}
+
+    mode = data.get("mode")
+    ips = data.get("ips")
+    if mode not in {"all", "restricted"} or not isinstance(ips, list):
+        print("[WARN] Invalid access config, defaulting to allow all")
+        return {"mode": "all", "ips": []}
+    return {"mode": mode, "ips": [str(ip) for ip in ips]}
+
+
+ACCESS_CONFIG = load_access_config()
 
 
 def run_script(name):
@@ -70,10 +92,85 @@ def shout_worker():
 
 class Handler(SimpleHTTPRequestHandler):
 
-    # Check if client IP starts with 10.66.66.
     def _ip_allowed(self):
         ip = self.client_address[0]
-        return ip.startswith(ALLOWED_SUBNET)
+        if ip in LOCALHOST_IPS:
+            return True
+        if ACCESS_CONFIG["mode"] == "all":
+            return True
+        return ip in set(ACCESS_CONFIG["ips"])
+
+    def _deny_access(self):
+        ip = self.client_address[0]
+        wants_html = "text/html" in self.headers.get("Accept", "") or self.path == "/"
+        message = "access denied"
+        detail = "ask the host to add you to the stream allow list"
+
+        self.send_response(403)
+        if wants_html:
+            body = """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>access denied</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #000;
+        color: #fff;
+        font: 16px/1.5 sans-serif;
+      }
+      main {
+        min-width: 220px;
+        max-width: 24rem;
+        padding: 18px 20px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(18, 18, 18, 0.94);
+        text-align: center;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+      }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 12px;
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        border-top-color: #fff;
+        animation: spin 0.85s linear infinite;
+      }
+      p {
+        color: rgba(255, 255, 255, 0.82);
+        margin: 8px 0 0;
+        font-size: 13px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="spinner" aria-hidden="true"></div>
+      <p>access denied</p>
+    </main>
+  </body>
+</html>
+"""
+            payload = body.encode("utf-8")
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+        else:
+            payload = f"{message}\n{detail}".encode("utf-8")
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+        print(f"[ACCESS] Denied {ip} for {self.path}")
 
     # Deny directory listings and noisy logs from default
     def log_message(self, format, *args):
@@ -82,8 +179,7 @@ class Handler(SimpleHTTPRequestHandler):
     # Restrict POST endpoints
     def do_POST(self):
         if not self._ip_allowed():
-            self.send_response(403)
-            self.end_headers()
+            self._deny_access()
             return
 
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
@@ -116,8 +212,7 @@ class Handler(SimpleHTTPRequestHandler):
     # Restrict GET requests (serving index.html and assets)
     def do_GET(self):
         if not self._ip_allowed():
-            self.send_response(403)
-            self.end_headers()
+            self._deny_access()
             return
 
         if self.path == "/soundlist":
@@ -271,7 +366,11 @@ if __name__ == "__main__":
     worker.start()
 
     server = HTTPServer(("0.0.0.0", 8090), Handler)
-    print("Server running on port 8090 (WireGuard-only)...")
+    if ACCESS_CONFIG["mode"] == "all":
+        access_label = "allowing all clients"
+    else:
+        access_label = f"allowing: {', '.join(ACCESS_CONFIG['ips'])}"
+    print(f"Server running on port 8090 ({access_label})...")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

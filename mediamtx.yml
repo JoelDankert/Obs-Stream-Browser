@@ -416,7 +416,7 @@ webrtcICEServers2: []
 # Time to wait for the WebRTC handshake to complete.
 webrtcHandshakeTimeout: 10s
 # Maximum time to gather video tracks.
-webrtcTrackGatherTimeout: 2s
+webrtcTrackGatherTimeout: 5s
 # The maximum time to gather STUN candidates.
 webrtcSTUNGatherTimeout: 5s
 
