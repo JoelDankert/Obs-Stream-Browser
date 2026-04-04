@@ -25,15 +25,19 @@ MEDIAMTX_IGNORED_WARNINGS = (
 def parse_allowed_hosts(raw_value: str):
     raw_value = raw_value.strip()
     if not raw_value:
-        return None
+        return sorted(HOST_NUMBERS)
     return parse_host_tokens(raw_value.split())
 
 
 def parse_host_tokens(tokens):
     if not tokens:
+        return sorted(HOST_NUMBERS)
+
+    normalized = {token.strip().lower() for token in tokens}
+    if "all" in normalized or "*" in normalized:
         return None
 
-    host_numbers = HOST_NUMBERS
+    host_numbers = set(HOST_NUMBERS)
     for token in tokens:
         try:
             host = int(token)
