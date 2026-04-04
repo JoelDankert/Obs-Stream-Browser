@@ -8,6 +8,8 @@ import threading
 import time
 from pathlib import Path
 
+HOST_NUMBERS = {1, 2, 3}
+
 BASE = Path(__file__).resolve().parent
 RUNTIME_DIR = BASE / "runtime"
 ACCESS_PATH = RUNTIME_DIR / "access.json"
@@ -24,9 +26,15 @@ def parse_allowed_hosts(raw_value: str):
     raw_value = raw_value.strip()
     if not raw_value:
         return None
+    return parse_host_tokens(raw_value.split())
 
-    host_numbers = {1}
-    for token in raw_value.split():
+
+def parse_host_tokens(tokens):
+    if not tokens:
+        return None
+
+    host_numbers = HOST_NUMBERS
+    for token in tokens:
         try:
             host = int(token)
         except ValueError:
@@ -153,14 +161,17 @@ def run_processes():
 def main():
     require_command("python3")
 
-    while True:
-        try:
-            print("Allowed hosts in 10.66.66.x")
-            raw_value = input()
-            host_numbers = parse_allowed_hosts(raw_value)
-            break
-        except ValueError as exc:
-            print(exc, file=sys.stderr)
+    if len(sys.argv) > 1:
+        host_numbers = parse_host_tokens(sys.argv[1:])
+    else:
+        while True:
+            try:
+                print("Allowed hosts in 10.66.66.x")
+                raw_value = input()
+                host_numbers = parse_allowed_hosts(raw_value)
+                break
+            except ValueError as exc:
+                print(exc, file=sys.stderr)
 
     allowed_ips = write_runtime_files(host_numbers)
 
