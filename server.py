@@ -291,8 +291,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
-            print(f"{MAGENTA}{ip_suffix}: sent request at /shout{RESET}")
-            print(f"{MAGENTA}{ip_suffix}: # {sound}{RESET}")
+            print(f"{MAGENTA}{ip_suffix}: #{sound}{RESET}")
             play_named_sound(sound)
             self.send_response(200)
             self.end_headers()
@@ -315,7 +314,6 @@ class Handler(SimpleHTTPRequestHandler):
         duration_ms = 3000
 
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
-        print(f"{MAGENTA}{ip_suffix}: sent request at /shout{RESET}")
         print(f"{MAGENTA}{ip_suffix}: {final_msg}{RESET}")
         with shout_cv:
             shout_queue.append((final_msg, duration_ms))
@@ -352,9 +350,9 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 was_present = ip in presence_ips
         if event == "join" and not was_present:
-            print(f"{YELLOW}{ip_label} connected{RESET}")
+            print(f"{YELLOW}{ip_label}: connected{RESET}")
         elif event == "leave" and was_present:
-            print(f"{YELLOW}{ip_label} disconnected{RESET}")
+            print(f"{YELLOW}{ip_label}: disconnected{RESET}")
         self.send_response(200)
         self.end_headers()
         self._safe_write(b"OK")
