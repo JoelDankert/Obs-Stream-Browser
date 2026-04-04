@@ -137,8 +137,8 @@ def run_processes():
     for thread in threads:
         thread.start()
 
-    print("[startstream] running server and mediamtx in this terminal")
-    print("[startstream] press Ctrl+C to stop both")
+    print("running server and mediamtx in this terminal")
+    print("press Ctrl+C to stop both")
 
     processes = {"server": server_process, "mediamtx": mediamtx_process}
     try:
@@ -154,7 +154,7 @@ def run_processes():
             time.sleep(0.2)
     except KeyboardInterrupt:
         print()
-        print("[startstream] stopping...")
+        print("stopping...")
         for process in processes.values():
             stop_process(process)
         for thread in threads:
