@@ -92,6 +92,12 @@ def shout_worker():
 
 class Handler(SimpleHTTPRequestHandler):
 
+    def _safe_write(self, payload: bytes):
+        try:
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def _ip_allowed(self):
         ip = self.client_address[0]
         if ip in LOCALHOST_IPS:
@@ -169,7 +175,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        self._safe_write(payload)
         print(f"[ACCESS] Denied {ip} for {self.path}")
 
     # Deny directory listings and noisy logs from default
@@ -178,48 +184,59 @@ class Handler(SimpleHTTPRequestHandler):
 
     # Restrict POST endpoints
     def do_POST(self):
-        if not self._ip_allowed():
-            self._deny_access()
+        try:
+            if not self._ip_allowed():
+                self._deny_access()
+                return
+
+            ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
+
+            mapping = {
+                "/space": "space.sh",
+                "/left":  "left.sh",
+                "/right": "right.sh",
+                "/up":    "up.sh",
+                "/down":  "down.sh"
+            }
+
+            if self.path == "/shout":
+                self._handle_shout()
+                return
+            if self.path == "/presence":
+                self._handle_presence()
+                return
+
+            if self.path in mapping:
+                print(f"{ip_suffix}: sent request at {self.path}")
+                run_script(mapping[self.path])
+                self.send_response(200)
+                self.end_headers()
+                self._safe_write(b"OK")
+            else:
+                self.send_response(404)
+                self.end_headers()
+        except (BrokenPipeError, ConnectionResetError):
             return
-
-        ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
-
-        mapping = {
-            "/space": "space.sh",
-            "/left":  "left.sh",
-            "/right": "right.sh",
-            "/up":    "up.sh",
-            "/down":  "down.sh"
-        }
-
-        if self.path == "/shout":
-            self._handle_shout()
-            return
-        if self.path == "/presence":
-            self._handle_presence()
-            return
-
-        if self.path in mapping:
-            print(f"{ip_suffix}: sent request at {self.path}")
-            run_script(mapping[self.path])
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"OK")
-        else:
-            self.send_response(404)
-            self.end_headers()
 
     # Restrict GET requests (serving index.html and assets)
     def do_GET(self):
-        if not self._ip_allowed():
-            self._deny_access()
-            return
+        try:
+            if not self._ip_allowed():
+                self._deny_access()
+                return
 
-        if self.path == "/soundlist":
-            self._handle_soundlist()
-            return
+            if self.path == "/favicon.ico":
+                self.send_response(204)
+                self.end_headers()
+                return
 
-        super().do_GET()
+            if self.path == "/soundlist":
+                self._handle_soundlist()
+                return
+
+            super().do_GET()
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     # Keep file serving inside ./stream
     def translate_path(self, path):
@@ -272,7 +289,7 @@ class Handler(SimpleHTTPRequestHandler):
             play_named_sound(sound)
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"OK")
+            self._safe_write(b"OK")
             return
         if DATA_IMAGE_RE.match(sanitized):
             final_msg = sanitized
@@ -299,10 +316,9 @@ class Handler(SimpleHTTPRequestHandler):
 
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"OK")
+        self._safe_write(b"OK")
 
     def _handle_presence(self):
-        return
         length = int(self.headers.get("Content-Length", "0"))
         body = b""
         if length > 0:
@@ -318,20 +334,23 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception:
                 pass
         ip = self.client_address[0]
-        last_octet = ip.split(".")[-1] if "." in ip else ip
+        ip_label = ip.split(".")[-1] if "." in ip else ip
         with presence_lock:
             if event == "join":
+                was_present = ip in presence_ips
                 presence_ips.add(ip)
             elif event == "leave":
+                was_present = ip in presence_ips
                 presence_ips.discard(ip)
-            count = len(presence_ips)
-            octets = [p.split(".")[-1] if "." in p else p for p in sorted(presence_ips)]
-            current_ips = ", ".join(octets)
-        print(f"{ip} {event}")
-        print(f"online: {count} [{current_ips}]")
+            else:
+                was_present = ip in presence_ips
+        if event == "join" and not was_present:
+            print(f"{ip_label} connected")
+        elif event == "leave" and was_present:
+            print(f"{ip_label} disconnected")
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"OK")
+        self._safe_write(b"OK")
 
     def _handle_soundlist(self):
         sounds_dir = os.path.join(HOSTCONTROL_DIR, "sounds")
@@ -358,7 +377,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        self._safe_write(body)
 
 
 if __name__ == "__main__":
