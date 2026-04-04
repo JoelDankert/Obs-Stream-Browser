@@ -8,6 +8,13 @@ from collections import deque
 import re
 from pathlib import Path
 
+RESET = "\033[0m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+RED = "\033[31m"
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 HOSTCONTROL_DIR = os.path.join(BASE, "hostcontrol")
 RUNTIME_DIR = os.path.join(BASE, "runtime")
@@ -26,13 +33,13 @@ def load_access_config():
     except FileNotFoundError:
         return {"mode": "all", "ips": []}
     except Exception as exc:
-        print(f"[WARN] Failed to load access config: {exc}")
+        print(f"{RED}[WARN] Failed to load access config: {exc}{RESET}")
         return {"mode": "all", "ips": []}
 
     mode = data.get("mode")
     ips = data.get("ips")
     if mode not in {"all", "restricted"} or not isinstance(ips, list):
-        print("[WARN] Invalid access config, defaulting to allow all")
+        print(f"{RED}[WARN] Invalid access config, defaulting to allow all{RESET}")
         return {"mode": "all", "ips": []}
     return {"mode": mode, "ips": [str(ip) for ip in ips]}
 
@@ -45,7 +52,7 @@ def run_script(name):
     if os.path.exists(path):
         subprocess.run([path])
     else:
-        print(f"[WARN] Script not found: {path}")
+        print(f"{RED}[WARN] Script not found: {path}{RESET}")
 
 
 def run_shout(message: str, duration_ms: int):
@@ -55,16 +62,16 @@ def run_shout(message: str, duration_ms: int):
         env["DURATION_MS"] = str(duration_ms)
         subprocess.run([path, message], env=env, check=False)
     else:
-        print(f"[WARN] Shout script not found: {path}")
+        print(f"{RED}[WARN] Shout script not found: {path}{RESET}")
 
 def play_named_sound(name: str):
     path = os.path.join(HOSTCONTROL_DIR, "play_sound.sh")
     if os.path.exists(path):
         res = subprocess.run([path, f"{name}.*"], check=False)
         if res.returncode != 0:
-            print(f"[WARN] play_sound.sh failed for: {name}")
+            print(f"{RED}[WARN] play_sound.sh failed for: {name}{RESET}")
     else:
-        print(f"[WARN] play_sound.sh not found: {path}")
+        print(f"{RED}[WARN] play_sound.sh not found: {path}{RESET}")
 
 # Simple shout queue to serialize overlays
 shout_queue = deque()
@@ -87,7 +94,7 @@ def shout_worker():
         try:
             run_shout(message, duration_ms)
         except Exception as e:
-            print(f"[WARN] shout error: {e}")
+            print(f"{RED}[WARN] shout error: {e}{RESET}")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -176,7 +183,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self._safe_write(payload)
-        print(f"[ACCESS] Denied {ip} for {self.path}")
+        print(f"{RED}[ACCESS] Denied {ip} for {self.path}{RESET}")
 
     # Deny directory listings and noisy logs from default
     def log_message(self, format, *args):
@@ -207,7 +214,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if self.path in mapping:
-                print(f"{ip_suffix}: sent request at {self.path}")
+                print(f"{BLUE}{ip_suffix}: sent request at {self.path}{RESET}")
                 run_script(mapping[self.path])
                 self.send_response(200)
                 self.end_headers()
@@ -284,8 +291,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
-            print(f"{ip_suffix}: sent request at /shout")
-            print(f"{ip_suffix}: # {sound}")
+            print(f"{MAGENTA}{ip_suffix}: sent request at /shout{RESET}")
+            print(f"{MAGENTA}{ip_suffix}: # {sound}{RESET}")
             play_named_sound(sound)
             self.send_response(200)
             self.end_headers()
@@ -308,8 +315,8 @@ class Handler(SimpleHTTPRequestHandler):
         duration_ms = 3000
 
         ip_suffix = self.client_address[0].split(".")[-1] if "." in self.client_address[0] else self.client_address[0]
-        print(f"{ip_suffix}: sent request at /shout")
-        print(f"{ip_suffix}: {final_msg}")
+        print(f"{MAGENTA}{ip_suffix}: sent request at /shout{RESET}")
+        print(f"{MAGENTA}{ip_suffix}: {final_msg}{RESET}")
         with shout_cv:
             shout_queue.append((final_msg, duration_ms))
             shout_cv.notify()
@@ -345,9 +352,9 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 was_present = ip in presence_ips
         if event == "join" and not was_present:
-            print(f"{ip_label} connected")
+            print(f"{YELLOW}{ip_label} connected{RESET}")
         elif event == "leave" and was_present:
-            print(f"{ip_label} disconnected")
+            print(f"{YELLOW}{ip_label} disconnected{RESET}")
         self.send_response(200)
         self.end_headers()
         self._safe_write(b"OK")
@@ -385,15 +392,11 @@ if __name__ == "__main__":
     worker.start()
 
     server = HTTPServer(("0.0.0.0", 8090), Handler)
-    if ACCESS_CONFIG["mode"] == "all":
-        access_label = "allowing all clients"
-    else:
-        access_label = f"allowing: {', '.join(ACCESS_CONFIG['ips'])}"
-    print(f"Server running on port 8090 ({access_label})...")
+    print(f"{GREEN}Server running on port 8090{RESET}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        print(f"\n{GREEN}Shutting down...{RESET}")
     finally:
         shout_stop.set()
         with shout_cv:

@@ -9,6 +9,10 @@ import time
 from pathlib import Path
 
 HOST_NUMBERS = {1, 2, 3}
+RESET = "\033[0m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+CLEAR_SCREEN = "\033[2J\033[H"
 
 BASE = Path(__file__).resolve().parent
 RUNTIME_DIR = BASE / "runtime"
@@ -84,7 +88,7 @@ def write_runtime_files(host_numbers):
 def require_command(name: str):
     if shutil.which(name):
         return
-    print(f"Missing required command: {name}", file=sys.stderr)
+    print(f"{RED}Missing required command: {name}{RESET}", file=sys.stderr)
     sys.exit(1)
 
 
@@ -137,8 +141,8 @@ def run_processes():
     for thread in threads:
         thread.start()
 
-    print("running server and mediamtx in this terminal")
-    print("press Ctrl+C to stop both")
+    print(f"{GREEN}running server and mediamtx in this terminal{RESET}")
+    print(f"{GREEN}press Ctrl+C to stop both{RESET}")
 
     processes = {"server": server_process, "mediamtx": mediamtx_process}
     try:
@@ -154,7 +158,7 @@ def run_processes():
             time.sleep(0.2)
     except KeyboardInterrupt:
         print()
-        print("stopping...")
+        print(f"{GREEN}stopping...{RESET}")
         for process in processes.values():
             stop_process(process)
         for thread in threads:
@@ -175,15 +179,15 @@ def main():
                 host_numbers = parse_allowed_hosts(raw_value)
                 break
             except ValueError as exc:
-                print(exc, file=sys.stderr)
+                print(f"{RED}{exc}{RESET}", file=sys.stderr)
 
     allowed_ips = write_runtime_files(host_numbers)
+    print(CLEAR_SCREEN, end="")
 
     if host_numbers is None:
-        print("Access: all IPs allowed")
+        print(f"{GREEN}Allowed IPs: all{RESET}")
     else:
-        print("Access:", " ".join(str(host) for host in host_numbers))
-        print("Allowed IPs:", ", ".join(allowed_ips))
+        print(f"{GREEN}Allowed IPs: {', '.join(allowed_ips)}{RESET}")
 
     sys.exit(run_processes())
 

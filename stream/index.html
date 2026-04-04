@@ -216,6 +216,7 @@
       let statusHideTimer = null;
       let lastFrameAt = 0;
       let playbackStarted = false;
+      let presenceJoined = false;
 
       async function waitForIceGatheringComplete(connection) {
         if (connection.iceGatheringState === "complete") return;
@@ -353,6 +354,10 @@
             player.srcObject = event.streams[0];
             player.play().catch(() => {});
             playbackStarted = true;
+            if (!presenceJoined) {
+              sendPresence("join");
+              presenceJoined = true;
+            }
             if (startupTimer) {
               clearTimeout(startupTimer);
               startupTimer = null;
@@ -427,7 +432,9 @@
 
       window.addEventListener("beforeunload", () => {
         stopPlayback();
-        sendPresence("leave");
+        if (presenceJoined) {
+          sendPresence("leave");
+        }
       });
 
       // ------- SHOUT / OVERLAY MESSAGE -------
@@ -614,8 +621,6 @@
           }).catch(() => {});
         }
       }
-
-      sendPresence("join");
 
       async function sendInput(endpoint) {
         try {
